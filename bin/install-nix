@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: install-nix [options]
+
+Options:
+  --daemon           Force the multi-user daemon install.
+  --no-daemon        Force the single-user install.
+  --yes              Do not prompt before running the Nix installer.
+  --dry-run          Print the installer command without running it.
+  -h, --help         Show this help.
+USAGE
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local reply
+
+  read -r -p "$prompt [y/N] " reply
+  case "$reply" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+has_systemd() {
+  [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1
+}
+
+install_mode=""
+assume_yes=0
+dry_run=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --daemon)
+      install_mode="--daemon"
+      shift
+      ;;
+    --no-daemon)
+      install_mode="--no-daemon"
+      shift
+      ;;
+    --yes)
+      assume_yes=1
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if command -v nix >/dev/null 2>&1; then
+  echo "Nix is already installed:"
+  nix --version
+  exit 0
+fi
+
+missing_commands=()
+for command_name in curl sh; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    missing_commands+=("$command_name")
+  fi
+done
+
+if [[ "${#missing_commands[@]}" -gt 0 ]]; then
+  echo "Missing required command(s): ${missing_commands[*]}" >&2
+  exit 1
+fi
+
+if [[ -z "$install_mode" ]]; then
+  if has_systemd; then
+    install_mode="--daemon"
+  else
+    install_mode="--no-daemon"
+  fi
+fi
+
+installer_url="https://nixos.org/nix/install"
+
+cat <<EOF
+Nix installer: $installer_url
+Install mode:   $install_mode
+
+Official guidance:
+- Linux with systemd: multi-user install with --daemon.
+- WSL without systemd: single-user install with --no-daemon.
+EOF
+
+if [[ "$dry_run" -eq 1 ]]; then
+  echo
+  echo "Command:"
+  printf "curl --proto '=https' --tlsv1.2 -L %q | sh -s -- %s\n" "$installer_url" "$install_mode"
+  exit 0
+fi
+
+if [[ "$assume_yes" -ne 1 ]]; then
+  if ! prompt_yes_no "Download and run the official Nix installer now?"; then
+    echo "Cancelled."
+    exit 0
+  fi
+fi
+
+curl --proto '=https' --tlsv1.2 -L "$installer_url" | sh -s -- "$install_mode"
+
+cat <<'EOF'
+
+Nix installer finished.
+
+Open a new shell, or source the Nix profile script if the installer printed one.
+Then verify:
+  nix --version
+EOF

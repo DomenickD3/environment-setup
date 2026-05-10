@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_REPO_URL="https://github.com/DomenickD3/environment-setup.git"
+REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/share/environment-setup}"
+DRY_RUN=0
+
+usage() {
+  cat <<'USAGE'
+Usage: install [script-name] [script-args...]
+
+Clones or updates this repo into INSTALL_DIR.
+
+With no script name, installs Nix if needed, then runs the GitHub SSH key
+setup interactively with gh available temporarily through Nix.
+
+Examples:
+  curl -fsSL RAW_INSTALL_URL | bash
+  curl -fsSL RAW_INSTALL_URL | bash -s -- --dry-run
+  curl -fsSL RAW_INSTALL_URL | bash -s -- install-nix
+  curl -fsSL RAW_INSTALL_URL | bash -s -- setup-github-ssh --help
+
+Environment:
+  REPO_URL       Git URL to clone. Default: https://github.com/DomenickD3/environment-setup.git
+  INSTALL_DIR   Install location. Default: ~/.local/share/environment-setup
+
+Available scripts are discovered from INSTALL_DIR/bin after installation.
+USAGE
+}
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+load_nix_profile() {
+  if command -v nix >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -r "$HOME/.nix-profile/etc/profile.d/nix.sh" ]]; then
+    # shellcheck disable=SC1091
+    . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+  elif [[ -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
+    # shellcheck disable=SC1091
+    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+  fi
+}
+
+run_default_bootstrap() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    "$INSTALL_DIR/bin/install-nix" --dry-run
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
+    return 0
+  fi
+
+  "$INSTALL_DIR/bin/install-nix"
+  load_nix_profile
+  command -v nix >/dev/null 2>&1 || fail "nix is not available in this shell yet; open a new shell and rerun install"
+  exec nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/bin/setup-github-ssh"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=1
+  shift
+fi
+
+command -v git >/dev/null 2>&1 || fail "git is required"
+
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+  echo "Updating $INSTALL_DIR"
+  if git -C "$INSTALL_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+    git -C "$INSTALL_DIR" fetch --prune
+    git -C "$INSTALL_DIR" pull --ff-only
+  else
+    echo "No upstream branch configured; skipping git pull."
+  fi
+else
+  echo "Installing $REPO_URL to $INSTALL_DIR"
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  git clone "$REPO_URL" "$INSTALL_DIR"
+fi
+
+if [[ $# -eq 0 ]]; then
+  run_default_bootstrap
+  exit 0
+fi
+
+script_name="$1"
+shift
+
+case "$script_name" in
+  */*|"."|"..")
+    fail "script name must be a command name from bin, not a path"
+    ;;
+esac
+
+script_path="$INSTALL_DIR/bin/$script_name"
+
+if [[ ! -x "$script_path" ]]; then
+  echo "Available commands:" >&2
+  find "$INSTALL_DIR/bin" -maxdepth 1 -type f -perm -u+x -printf '  %f\n' | sort >&2
+  fail "unknown or non-executable script: $script_name"
+fi
+
+exec "$script_path" "$@"

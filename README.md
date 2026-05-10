@@ -16,7 +16,9 @@ This clones or updates the repo at:
 ~/.local/share/environment-setup
 ```
 
-Then it installs Nix if needed and runs the GitHub SSH key setup interactively.
+Then it installs Nix if needed, installs Codex into your Nix profile, runs the
+GitHub SSH key setup interactively, and prompts you to log in to your Codex
+subscription.
 The GitHub CLI is provided temporarily through Nix and is not installed globally.
 
 Use a different location with:
@@ -49,6 +51,12 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
 
 - `bin/install-nix`: install Nix using the official installer URL.
 - `bin/setup-github-ssh`: generate a GitHub SSH key and optionally derive the GitHub noreply email with `gh`.
+
+The default install flow also installs Codex persistently with:
+
+```bash
+nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#codex
+```
 
 ## Nix
 

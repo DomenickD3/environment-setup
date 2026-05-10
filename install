@@ -3,7 +3,17 @@ set -euo pipefail
 
 DEFAULT_REPO_URL="https://github.com/DomenickD3/environment-setup.git"
 REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/share/environment-setup}"
+DEFAULT_INSTALL_DIR="$HOME/.local/share/environment-setup"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [[ -n "$SCRIPT_SOURCE" && -f "$SCRIPT_SOURCE" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+fi
+if [[ -z "${INSTALL_DIR:-}" && -n "$SCRIPT_DIR" && -x "$SCRIPT_DIR/bin/install-nix" ]]; then
+  INSTALL_DIR="$SCRIPT_DIR"
+else
+  INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+fi
 DRY_RUN=0
 
 usage() {
@@ -12,8 +22,9 @@ Usage: install [script-name] [script-args...]
 
 Clones or updates this repo into INSTALL_DIR.
 
-With no script name, installs Nix if needed, then runs the GitHub SSH key
-setup interactively with gh available temporarily through Nix.
+With no script name, installs Nix if needed, installs Codex into your Nix
+profile, then runs the GitHub SSH key setup and prompts you to log in to
+your Codex subscription. The GitHub CLI is provided temporarily through Nix.
 
 Examples:
   curl -fsSL RAW_INSTALL_URL | bash
@@ -34,6 +45,10 @@ fail() {
   exit 1
 }
 
+section() {
+  printf "\n==> %s\n\n" "$1"
+}
+
 load_nix_profile() {
   if command -v nix >/dev/null 2>&1; then
     return 0
@@ -48,21 +63,109 @@ load_nix_profile() {
   fi
 }
 
-run_default_bootstrap() {
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    "$INSTALL_DIR/bin/install-nix" --dry-run
-    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
+codex_bin() {
+  printf "%s/.nix-profile/bin/codex\n" "$HOME"
+}
+
+install_codex() {
+  local installed_codex
+
+  section "Install Codex"
+  installed_codex="$(codex_bin)"
+  if [[ -x "$installed_codex" ]]; then
+    echo "Codex is already installed in your Nix profile:"
+    "$installed_codex" --version
     return 0
   fi
 
+  echo "Installing Codex into your Nix profile..."
+  nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add "path:$INSTALL_DIR#codex"
+}
+
+ensure_nix_profile_path() {
+  local bashrc="$HOME/.bashrc"
+  local profile_bin="$HOME/.nix-profile/bin"
+
+  case ":$PATH:" in
+    *":$profile_bin:"*) ;;
+    *) export PATH="$profile_bin:$PATH" ;;
+  esac
+
+  if [[ -f "$bashrc" ]] && ! grep -Fq '.nix-profile/bin' "$bashrc"; then
+    cat <<'EOF' >> "$bashrc"
+
+# Prefer user-installed Nix binaries, including codex.
+if [ -d "$HOME/.nix-profile/bin" ]; then
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+fi
+EOF
+    echo "Added ~/.nix-profile/bin to $bashrc for future shells."
+  fi
+}
+
+run_codex_login() {
+  local installed_codex
+
+  installed_codex="$(codex_bin)"
+  [[ -x "$installed_codex" ]] || fail "codex is not installed at $installed_codex"
+
+  if "$installed_codex" login status >/dev/null 2>&1; then
+    echo "Codex is already authenticated."
+    return 0
+  fi
+
+  echo
+  echo "Starting Codex subscription login."
+  "$installed_codex" login --device-auth
+}
+
+run_github_setup() {
+  "$INSTALL_DIR/bin/setup-github-ssh"
+}
+
+require_install_files() {
+  local missing=()
+
+  [[ -x "$INSTALL_DIR/bin/install-nix" ]] || missing+=("$INSTALL_DIR/bin/install-nix")
+  [[ -x "$INSTALL_DIR/bin/setup-github-ssh" ]] || missing+=("$INSTALL_DIR/bin/setup-github-ssh")
+  [[ -f "$INSTALL_DIR/flake.nix" ]] || missing+=("$INSTALL_DIR/flake.nix")
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf "error: install directory is incomplete: %s\n" "$INSTALL_DIR" >&2
+    printf "missing: %s\n" "${missing[@]}" >&2
+    exit 1
+  fi
+}
+
+run_default_bootstrap() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    "$INSTALL_DIR/bin/install-nix" --dry-run
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#codex"
+    printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
+    printf "%q login --device-auth\n" "$(codex_bin)"
+    return 0
+  fi
+
+  section "Install Nix"
   "$INSTALL_DIR/bin/install-nix"
   load_nix_profile
   command -v nix >/dev/null 2>&1 || fail "nix is not available in this shell yet; open a new shell and rerun install"
-  exec nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/bin/setup-github-ssh"
+  install_codex
+  ensure_nix_profile_path
+  section "GitHub SSH"
+  nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/install" "__github-setup"
+  section "Codex Login"
+  run_codex_login
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
+  exit 0
+fi
+
+if [[ "${1:-}" == "__github-setup" ]]; then
+  run_github_setup
   exit 0
 fi
 
@@ -86,6 +189,8 @@ else
   mkdir -p "$(dirname "$INSTALL_DIR")"
   git clone "$REPO_URL" "$INSTALL_DIR"
 fi
+
+require_install_files
 
 if [[ $# -eq 0 ]]; then
   run_default_bootstrap

@@ -19,6 +19,7 @@
     {
       packages = forAllSystems (system: {
         default = nixpkgs.legacyPackages.${system}.gh;
+        codex = nixpkgs.legacyPackages.${system}.codex;
         gh = nixpkgs.legacyPackages.${system}.gh;
       });
 

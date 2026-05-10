@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
 ## Commands
 
 - `bin/install-nix`: install Nix using the official installer URL.
-- `bin/setup-github-ssh`: generate a GitHub SSH key and optionally derive the GitHub noreply email with `gh`.
+- `bin/setup-github-ssh`: generate a GitHub SSH key, optionally upload it with `gh`, and test SSH authentication.
 
 The default install flow also installs Codex, Neovim, and tmux persistently with:
 

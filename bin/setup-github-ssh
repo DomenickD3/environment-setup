@@ -6,8 +6,7 @@ usage() {
 Usage: setup-github-ssh [options]
 
 Options:
-  --email EMAIL       Key comment. Optional when GITHUB_NOREPLY_EMAIL,
-                      GITHUB_SSH_KEY_EMAIL, gh auth, or git user.email is set.
+  --email EMAIL       Key comment override. Default: github-ssh-$USER@$(hostname).
   --key-name NAME     Filename under ~/.ssh. Default: id_ed25519_github.
   --type TYPE         ed25519 or rsa. Default: ed25519.
   --no-agent          Skip starting ssh-agent and adding the key.
@@ -27,10 +26,8 @@ prompt_yes_no() {
   esac
 }
 
-derive_noreply_email() {
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh api user --jq '"\(.id)+\(.login)@users.noreply.github.com"'
-  fi
+default_key_comment() {
+  printf "github-ssh-%s@%s\n" "${USER:-user}" "$(hostname)"
 }
 
 normalize_public_key() {
@@ -225,36 +222,9 @@ if [[ -e "$key_path" && "$force" -ne 1 ]]; then
   key_exists=1
 fi
 
-if [[ "$key_exists" -ne 1 ]]; then
-  if [[ -z "$email" ]]; then
-    email="${GITHUB_NOREPLY_EMAIL:-${GITHUB_SSH_KEY_EMAIL:-}}"
-  fi
-
-  if [[ -z "$email" ]] && command -v gh >/dev/null 2>&1; then
-    if ! gh auth status >/dev/null 2>&1; then
-      echo "GitHub CLI is installed but not authenticated."
-      if prompt_yes_no "Log in to GitHub now so I can derive your noreply email automatically?"; then
-        gh auth login --hostname github.com --git-protocol ssh --web
-      fi
-    fi
-
-    email="$(derive_noreply_email || true)"
-  fi
-
-  if [[ -z "$email" ]] && command -v git >/dev/null 2>&1; then
-    email="$(git config --global user.email || true)"
-  fi
-
-  if [[ -z "$email" ]]; then
-    echo "I could not derive your GitHub noreply email automatically."
-    echo "You can find it in GitHub email settings, or use the format ID+USERNAME@users.noreply.github.com."
-    read -r -p "GitHub SSH key email/comment: " email
-  fi
-
-  if [[ -z "$email" ]]; then
-    echo "No email/comment provided; aborting." >&2
-    exit 2
-  fi
+if [[ "$key_exists" -ne 1 && -z "$email" ]]; then
+  email="${GITHUB_SSH_KEY_EMAIL:-${GITHUB_NOREPLY_EMAIL:-}}"
+  email="${email:-$(default_key_comment)}"
 fi
 
 mkdir -p "$ssh_dir"

@@ -63,23 +63,56 @@ load_nix_profile() {
   fi
 }
 
+update_system_packages() {
+  section "Update System Packages"
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "apt-get is not available; skipping system package update."
+    return 0
+  fi
+
+  sudo apt-get update
+  sudo apt-get upgrade
+}
+
 codex_bin() {
   printf "%s/.nix-profile/bin/codex\n" "$HOME"
 }
 
-install_codex() {
-  local installed_codex
+profile_bin() {
+  printf "%s/.nix-profile/bin/%s\n" "$HOME" "$1"
+}
 
-  section "Install Codex"
-  installed_codex="$(codex_bin)"
-  if [[ -x "$installed_codex" ]]; then
-    echo "Codex is already installed in your Nix profile:"
-    "$installed_codex" --version
+install_profile_package() {
+  local name="$1"
+  local attr="$2"
+  local binary="$3"
+  local installed_binary
+
+  installed_binary="$(profile_bin "$binary")"
+  if [[ -x "$installed_binary" ]]; then
+    echo "$name is already installed in your Nix profile:"
+    "$installed_binary" --version
     return 0
   fi
 
-  echo "Installing Codex into your Nix profile..."
-  nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add "path:$INSTALL_DIR#codex"
+  echo "Installing $name into your Nix profile..."
+  nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add "path:$INSTALL_DIR#$attr"
+}
+
+install_codex() {
+  section "Install Codex"
+  install_profile_package "Codex" "codex" "codex"
+}
+
+install_neovim() {
+  section "Install Neovim"
+  install_profile_package "Neovim" "neovim" "nvim"
+}
+
+install_tmux() {
+  section "Install tmux"
+  install_profile_package "tmux" "tmux" "tmux"
 }
 
 ensure_nix_profile_path() {
@@ -139,19 +172,26 @@ require_install_files() {
 
 run_default_bootstrap() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf "sudo apt-get update\n"
+    printf "sudo apt-get upgrade\n"
     "$INSTALL_DIR/bin/install-nix" --dry-run
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#codex"
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#neovim"
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#tmux"
     printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
     printf "%q login --device-auth\n" "$(codex_bin)"
     return 0
   fi
 
+  update_system_packages
   section "Install Nix"
   "$INSTALL_DIR/bin/install-nix"
   load_nix_profile
   command -v nix >/dev/null 2>&1 || fail "nix is not available in this shell yet; open a new shell and rerun install"
   install_codex
+  install_neovim
+  install_tmux
   ensure_nix_profile_path
   section "GitHub SSH"
   nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/install" "__github-setup"
@@ -177,15 +217,24 @@ fi
 command -v git >/dev/null 2>&1 || fail "git is required"
 
 if [[ -d "$INSTALL_DIR/.git" ]]; then
-  echo "Updating $INSTALL_DIR"
+  if [[ "$INSTALL_DIR" == "$SCRIPT_DIR" ]]; then
+    echo "Using local checkout: $INSTALL_DIR"
+  else
+    echo "Using existing install directory: $INSTALL_DIR"
+  fi
+
   if git -C "$INSTALL_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+    echo "Updating install directory from its configured upstream branch..."
     git -C "$INSTALL_DIR" fetch --prune
     git -C "$INSTALL_DIR" pull --ff-only
   else
-    echo "No upstream branch configured; skipping git pull."
+    echo "No upstream branch is configured for this checkout; skipping git pull."
+    echo "Set an upstream branch, such as origin/main, if you want this installer to self-update."
   fi
 else
-  echo "Installing $REPO_URL to $INSTALL_DIR"
+  echo "Cloning environment setup repo:"
+  echo "  from: $REPO_URL"
+  echo "  to:   $INSTALL_DIR"
   mkdir -p "$(dirname "$INSTALL_DIR")"
   git clone "$REPO_URL" "$INSTALL_DIR"
 fi

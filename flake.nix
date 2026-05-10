@@ -21,6 +21,8 @@
         default = nixpkgs.legacyPackages.${system}.gh;
         codex = nixpkgs.legacyPackages.${system}.codex;
         gh = nixpkgs.legacyPackages.${system}.gh;
+        neovim = nixpkgs.legacyPackages.${system}.neovim;
+        tmux = nixpkgs.legacyPackages.${system}.tmux;
       });
 
       devShells = forAllSystems (system: {

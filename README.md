@@ -19,8 +19,21 @@ This clones or updates the repo at:
 Then it updates apt packages when apt is available, installs Nix if needed,
 installs Codex, GitHub CLI, Neovim, tmux, and stow into your Nix profile, runs
 the GitHub SSH key setup interactively, clones or updates your dotfiles and
-dotfiles-private repos, runs their install commands, and prompts you to log in
-to your Codex subscription.
+dotfiles-private repos, runs their install commands, writes a current-shell
+activation script, and prompts you to log in to your Codex subscription.
+
+Installer output is appended to:
+
+```text
+~/.local/state/environment-setup/install.log
+```
+
+If a step fails, the terminal output includes the failing command and the log
+path. Use a different log file with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/install | INSTALL_LOG="$HOME/install.log" bash
+```
 
 Use a different location with:
 
@@ -80,11 +93,27 @@ For dotfiles, the installer defaults to:
 
 - cloning `git@github.com:DomenickD3/.dotfiles.git` into `~/.dotfiles`
 - cloning `git@github.com:DomenickD3/.dotfiles-private.git` into `~/.dotfiles-private`
-- auto-detecting one of `./bootstrap`, `./install`, `./setup`, or `script/install`
+- auto-detecting one of `./bootstrap`, `./install`, `./install.sh`, `./setup`, or `script/install`
 - running that command from inside each checkout
 
 If either repo uses a different entrypoint, set `DOTFILES_INSTALL_CMD` or
 `DOTFILES_PRIVATE_INSTALL_CMD`.
+
+After dotfiles install, the installer writes an activation script that sources
+`~/.profile` and `~/.bashrc` by default. The installer does not source those
+files itself because it cannot change the parent terminal when run with
+`curl ... | bash`.
+
+To apply the installed Nix profile and shell startup files to the terminal that
+launched the installer, source the generated activation file after install:
+
+```bash
+. ~/.local/state/environment-setup/activate.sh
+```
+
+Override the generated file path with `ACTIVATE_SCRIPT`. Override or disable the
+startup files included in that activation script with `SOURCE_AFTER_INSTALL_FILES`,
+using a colon-separated list of files.
 
 ## Nix
 

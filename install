@@ -4,6 +4,14 @@ set -euo pipefail
 DEFAULT_REPO_URL="https://github.com/DomenickD3/environment-setup.git"
 REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 DEFAULT_INSTALL_DIR="$HOME/.local/share/environment-setup"
+DEFAULT_DOTFILES_REPO_URL="git@github.com:DomenickD3/.dotfiles.git"
+DOTFILES_REPO_URL="${DOTFILES_REPO_URL:-$DEFAULT_DOTFILES_REPO_URL}"
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+DOTFILES_INSTALL_CMD="${DOTFILES_INSTALL_CMD:-}"
+DEFAULT_DOTFILES_PRIVATE_REPO_URL="git@github.com:DomenickD3/.dotfiles-private.git"
+DOTFILES_PRIVATE_REPO_URL="${DOTFILES_PRIVATE_REPO_URL:-$DEFAULT_DOTFILES_PRIVATE_REPO_URL}"
+DOTFILES_PRIVATE_DIR="${DOTFILES_PRIVATE_DIR:-$HOME/.dotfiles-private}"
+DOTFILES_PRIVATE_INSTALL_CMD="${DOTFILES_PRIVATE_INSTALL_CMD:-}"
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
 SCRIPT_DIR=""
 if [[ -n "$SCRIPT_SOURCE" && -f "$SCRIPT_SOURCE" ]]; then
@@ -23,8 +31,10 @@ Usage: install [script-name] [script-args...]
 Clones or updates this repo into INSTALL_DIR.
 
 With no script name, installs Nix if needed, installs Codex into your Nix
-profile, then runs the GitHub SSH key setup and prompts you to log in to
-your Codex subscription. The GitHub CLI is provided temporarily through Nix.
+profile, along with Neovim, tmux, and stow, then runs the GitHub SSH key
+setup, clones or updates your dotfiles, installs them, and prompts you to log
+in to your Codex subscription. The GitHub CLI is provided temporarily through
+Nix.
 
 Examples:
   curl -fsSL RAW_INSTALL_URL | bash
@@ -35,6 +45,15 @@ Examples:
 Environment:
   REPO_URL       Git URL to clone. Default: https://github.com/DomenickD3/environment-setup.git
   INSTALL_DIR   Install location. Default: ~/.local/share/environment-setup
+  DOTFILES_REPO_URL  Git URL for dotfiles. Default: git@github.com:DomenickD3/.dotfiles.git
+  DOTFILES_DIR       Dotfiles checkout location. Default: ~/.dotfiles
+  DOTFILES_INSTALL_CMD  Command to run inside the dotfiles checkout after syncing.
+                        Default: auto-detect bootstrap/install/setup/script/install
+  DOTFILES_PRIVATE_REPO_URL  Git URL for private dotfiles.
+                        Default: git@github.com:DomenickD3/.dotfiles-private.git
+  DOTFILES_PRIVATE_DIR  Private dotfiles checkout location. Default: ~/.dotfiles-private
+  DOTFILES_PRIVATE_INSTALL_CMD  Command to run inside the private dotfiles checkout after syncing.
+                        Default: auto-detect bootstrap/install/setup/script/install
 
 Available scripts are discovered from INSTALL_DIR/bin after installation.
 USAGE
@@ -115,6 +134,11 @@ install_tmux() {
   install_profile_package "tmux" "tmux" "tmux"
 }
 
+install_stow() {
+  section "Install stow"
+  install_profile_package "stow" "stow" "stow"
+}
+
 ensure_nix_profile_path() {
   local bashrc="$HOME/.bashrc"
   local profile_bin="$HOME/.nix-profile/bin"
@@ -156,6 +180,69 @@ run_github_setup() {
   "$INSTALL_DIR/bin/setup-github-ssh"
 }
 
+dotfiles_install_command() {
+  local repo_dir="$1"
+  local install_cmd="${2:-}"
+
+  if [[ -n "$install_cmd" ]]; then
+    printf "%s\n" "$install_cmd"
+    return 0
+  fi
+
+  local candidate
+  for candidate in \
+    "./bootstrap" \
+    "./install" \
+    "./setup" \
+    "script/install"
+  do
+    if [[ -x "$repo_dir/$candidate" ]]; then
+      printf "%s\n" "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+sync_and_install_repo() {
+  local section_name="$1"
+  local repo_url="$2"
+  local repo_dir="$3"
+  local install_cmd_override="${4:-}"
+  local install_cmd
+
+  section "$section_name"
+
+  if [[ -d "$repo_dir/.git" ]]; then
+    echo "Using existing checkout: $repo_dir"
+    git -C "$repo_dir" fetch --prune
+    git -C "$repo_dir" pull --ff-only
+  else
+    echo "Cloning repo:"
+    echo "  from: $repo_url"
+    echo "  to:   $repo_dir"
+    mkdir -p "$(dirname "$repo_dir")"
+    git clone "$repo_url" "$repo_dir"
+  fi
+
+  install_cmd="$(dotfiles_install_command "$repo_dir" "$install_cmd_override")" || fail "could not find an install command in $repo_dir; set the matching *_INSTALL_CMD variable"
+
+  echo "Running install command: $install_cmd"
+  (
+    cd "$repo_dir"
+    eval "$install_cmd"
+  )
+}
+
+install_dotfiles() {
+  sync_and_install_repo "Dotfiles" "$DOTFILES_REPO_URL" "$DOTFILES_DIR" "$DOTFILES_INSTALL_CMD"
+}
+
+install_dotfiles_private() {
+  sync_and_install_repo "Private Dotfiles" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD"
+}
+
 require_install_files() {
   local missing=()
 
@@ -178,8 +265,31 @@ run_default_bootstrap() {
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#codex"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#neovim"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#tmux"
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#stow"
     printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
+    if [[ -d "$DOTFILES_DIR/.git" ]]; then
+      printf "git -C %q fetch --prune\n" "$DOTFILES_DIR"
+      printf "git -C %q pull --ff-only\n" "$DOTFILES_DIR"
+    else
+      printf "git clone %q %q\n" "$DOTFILES_REPO_URL" "$DOTFILES_DIR"
+    fi
+    if install_cmd="$(dotfiles_install_command "$DOTFILES_DIR" "$DOTFILES_INSTALL_CMD")"; then
+      printf "cd %q && %s\n" "$DOTFILES_DIR" "$install_cmd"
+    else
+      printf "# set DOTFILES_INSTALL_CMD to install dotfiles from %q\n" "$DOTFILES_DIR"
+    fi
+    if [[ -d "$DOTFILES_PRIVATE_DIR/.git" ]]; then
+      printf "git -C %q fetch --prune\n" "$DOTFILES_PRIVATE_DIR"
+      printf "git -C %q pull --ff-only\n" "$DOTFILES_PRIVATE_DIR"
+    else
+      printf "git clone %q %q\n" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR"
+    fi
+    if install_cmd="$(dotfiles_install_command "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD")"; then
+      printf "cd %q && %s\n" "$DOTFILES_PRIVATE_DIR" "$install_cmd"
+    else
+      printf "# set DOTFILES_PRIVATE_INSTALL_CMD to install private dotfiles from %q\n" "$DOTFILES_PRIVATE_DIR"
+    fi
     printf "%q login --device-auth\n" "$(codex_bin)"
     return 0
   fi
@@ -192,9 +302,12 @@ run_default_bootstrap() {
   install_codex
   install_neovim
   install_tmux
+  install_stow
   ensure_nix_profile_path
   section "GitHub SSH"
   nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/install" "__github-setup"
+  install_dotfiles
+  install_dotfiles_private
   section "Codex Login"
   run_codex_login
 }

@@ -22,6 +22,7 @@
         codex = nixpkgs.legacyPackages.${system}.codex;
         gh = nixpkgs.legacyPackages.${system}.gh;
         neovim = nixpkgs.legacyPackages.${system}.neovim;
+        stow = nixpkgs.legacyPackages.${system}.stow;
         tmux = nixpkgs.legacyPackages.${system}.tmux;
       });
 

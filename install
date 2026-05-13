@@ -31,10 +31,9 @@ Usage: install [script-name] [script-args...]
 Clones or updates this repo into INSTALL_DIR.
 
 With no script name, installs Nix if needed, installs Codex into your Nix
-profile, along with Neovim, tmux, and stow, then runs the GitHub SSH key
-setup, clones or updates your dotfiles, installs them, and prompts you to log
-in to your Codex subscription. The GitHub CLI is provided temporarily through
-Nix.
+profile, along with GitHub CLI, Neovim, tmux, and stow, then runs the GitHub
+SSH key setup, clones or updates your dotfiles, installs them, and prompts you
+to log in to your Codex subscription.
 
 Examples:
   curl -fsSL RAW_INSTALL_URL | bash
@@ -122,6 +121,11 @@ install_profile_package() {
 install_codex() {
   section "Install Codex"
   install_profile_package "Codex" "codex" "codex"
+}
+
+install_gh() {
+  section "Install GitHub CLI"
+  install_profile_package "GitHub CLI" "gh" "gh"
 }
 
 install_neovim() {
@@ -263,11 +267,12 @@ run_default_bootstrap() {
     printf "sudo apt-get upgrade\n"
     "$INSTALL_DIR/bin/install-nix" --dry-run
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#codex"
+    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#gh"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#neovim"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#tmux"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#stow"
     printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
-    printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes shell %q -c %q\n" "path:$INSTALL_DIR#gh" "$INSTALL_DIR/bin/setup-github-ssh"
+    printf "%q\n" "$INSTALL_DIR/bin/setup-github-ssh"
     if [[ -d "$DOTFILES_DIR/.git" ]]; then
       printf "git -C %q fetch --prune\n" "$DOTFILES_DIR"
       printf "git -C %q pull --ff-only\n" "$DOTFILES_DIR"
@@ -300,12 +305,13 @@ run_default_bootstrap() {
   load_nix_profile
   command -v nix >/dev/null 2>&1 || fail "nix is not available in this shell yet; open a new shell and rerun install"
   install_codex
+  install_gh
   install_neovim
   install_tmux
   install_stow
   ensure_nix_profile_path
   section "GitHub SSH"
-  nix --extra-experimental-features nix-command --extra-experimental-features flakes shell "path:$INSTALL_DIR#gh" -c "$INSTALL_DIR/install" "__github-setup"
+  "$INSTALL_DIR/install" "__github-setup"
   install_dotfiles
   install_dotfiles_private
   section "Codex Login"

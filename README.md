@@ -17,11 +17,10 @@ This clones or updates the repo at:
 ```
 
 Then it updates apt packages when apt is available, installs Nix if needed,
-installs Codex, Neovim, tmux, and stow into your Nix profile, runs the GitHub
-SSH key setup interactively, clones or updates your dotfiles and
+installs Codex, GitHub CLI, Neovim, tmux, and stow into your Nix profile, runs
+the GitHub SSH key setup interactively, clones or updates your dotfiles and
 dotfiles-private repos, runs their install commands, and prompts you to log in
-to your Codex subscription. The GitHub CLI is provided temporarily through Nix
-and is not installed globally.
+to your Codex subscription.
 
 Use a different location with:
 
@@ -67,10 +66,11 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
 - `bin/install-nix`: install Nix using the official installer URL.
 - `bin/setup-github-ssh`: generate a GitHub SSH key, optionally upload it with `gh`, and test SSH authentication.
 
-The default install flow also installs Codex, Neovim, tmux, and stow persistently with:
+The default install flow also installs Codex, GitHub CLI, Neovim, tmux, and stow persistently with:
 
 ```bash
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#codex
+nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#gh
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#neovim
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#tmux
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#stow

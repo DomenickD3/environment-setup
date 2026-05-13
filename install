@@ -27,11 +27,12 @@ else
   INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 fi
 DRY_RUN=0
+DOTFILES_ONLY=0
 ORIGINAL_ARGS=("$@")
 
 usage() {
   cat <<'USAGE'
-Usage: install [script-name] [script-args...]
+Usage: install [options] [script-name] [script-args...]
 
 Clones or updates this repo into INSTALL_DIR.
 
@@ -41,9 +42,15 @@ SSH key setup, clones or updates your dotfiles, installs them, writes a
 current-shell activation script, and prompts you to log in to your Codex
 subscription.
 
+Options:
+  --dry-run          Print the actions without running them.
+  --dotfiles-only   Only clone/update and install dotfiles and private dotfiles.
+  -h, --help         Show this help.
+
 Examples:
   curl -fsSL RAW_INSTALL_URL | bash
   curl -fsSL RAW_INSTALL_URL | bash -s -- --dry-run
+  curl -fsSL RAW_INSTALL_URL | bash -s -- --dotfiles-only
   curl -fsSL RAW_INSTALL_URL | bash -s -- install-nix
   curl -fsSL RAW_INSTALL_URL | bash -s -- setup-github-ssh --help
 
@@ -342,6 +349,59 @@ install_dotfiles_private() {
   sync_and_install_repo "Private Dotfiles" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD"
 }
 
+print_dotfiles_dry_run() {
+  local install_cmd
+  local source_file
+  local source_files=()
+
+  if [[ -d "$DOTFILES_DIR/.git" ]]; then
+    printf "git -C %q fetch --prune\n" "$DOTFILES_DIR"
+    printf "git -C %q pull --ff-only\n" "$DOTFILES_DIR"
+  else
+    printf "git clone %q %q\n" "$DOTFILES_REPO_URL" "$DOTFILES_DIR"
+  fi
+  if install_cmd="$(dotfiles_install_command "$DOTFILES_DIR" "$DOTFILES_INSTALL_CMD")"; then
+    printf "cd %q && %s\n" "$DOTFILES_DIR" "$install_cmd"
+  else
+    printf "# set DOTFILES_INSTALL_CMD to install dotfiles from %q\n" "$DOTFILES_DIR"
+  fi
+  if [[ -d "$DOTFILES_PRIVATE_DIR/.git" ]]; then
+    printf "git -C %q fetch --prune\n" "$DOTFILES_PRIVATE_DIR"
+    printf "git -C %q pull --ff-only\n" "$DOTFILES_PRIVATE_DIR"
+  else
+    printf "git clone %q %q\n" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR"
+  fi
+  if install_cmd="$(dotfiles_install_command "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD")"; then
+    printf "cd %q && %s\n" "$DOTFILES_PRIVATE_DIR" "$install_cmd"
+  else
+    printf "# set DOTFILES_PRIVATE_INSTALL_CMD to install private dotfiles from %q\n" "$DOTFILES_PRIVATE_DIR"
+  fi
+  if [[ -n "$SOURCE_AFTER_INSTALL_FILES" ]]; then
+    IFS=':' read -r -a source_files <<< "$SOURCE_AFTER_INSTALL_FILES"
+    for source_file in "${source_files[@]}"; do
+      [[ -n "$source_file" ]] || continue
+      printf "# activation script will source %q\n" "$source_file"
+    done
+  fi
+  printf "cat > %q <<'EOF'\n" "$ACTIVATE_SCRIPT"
+  printf "# activation script contents omitted in dry-run\n"
+  printf "EOF\n"
+  printf "chmod 600 %q\n" "$ACTIVATE_SCRIPT"
+}
+
+run_dotfiles_only() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    print_dotfiles_dry_run
+    printf ". %q\n" "$ACTIVATE_SCRIPT"
+    return 0
+  fi
+
+  install_dotfiles
+  install_dotfiles_private
+  write_activate_script
+  print_current_shell_notice
+}
+
 print_current_shell_notice() {
   section "Current Shell"
   echo "Shell changes made inside this installer cannot modify the parent terminal."
@@ -365,10 +425,6 @@ require_install_files() {
 }
 
 run_default_bootstrap() {
-  local install_cmd
-  local source_file
-  local source_files=()
-
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf "sudo apt-get update\n"
     printf "sudo apt-get upgrade\n"
@@ -380,39 +436,7 @@ run_default_bootstrap() {
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#stow"
     printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
     printf "%q\n" "$INSTALL_DIR/bin/setup-github-ssh"
-    if [[ -d "$DOTFILES_DIR/.git" ]]; then
-      printf "git -C %q fetch --prune\n" "$DOTFILES_DIR"
-      printf "git -C %q pull --ff-only\n" "$DOTFILES_DIR"
-    else
-      printf "git clone %q %q\n" "$DOTFILES_REPO_URL" "$DOTFILES_DIR"
-    fi
-    if install_cmd="$(dotfiles_install_command "$DOTFILES_DIR" "$DOTFILES_INSTALL_CMD")"; then
-      printf "cd %q && %s\n" "$DOTFILES_DIR" "$install_cmd"
-    else
-      printf "# set DOTFILES_INSTALL_CMD to install dotfiles from %q\n" "$DOTFILES_DIR"
-    fi
-    if [[ -d "$DOTFILES_PRIVATE_DIR/.git" ]]; then
-      printf "git -C %q fetch --prune\n" "$DOTFILES_PRIVATE_DIR"
-      printf "git -C %q pull --ff-only\n" "$DOTFILES_PRIVATE_DIR"
-    else
-      printf "git clone %q %q\n" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR"
-    fi
-    if install_cmd="$(dotfiles_install_command "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD")"; then
-      printf "cd %q && %s\n" "$DOTFILES_PRIVATE_DIR" "$install_cmd"
-    else
-      printf "# set DOTFILES_PRIVATE_INSTALL_CMD to install private dotfiles from %q\n" "$DOTFILES_PRIVATE_DIR"
-    fi
-    if [[ -n "$SOURCE_AFTER_INSTALL_FILES" ]]; then
-      IFS=':' read -r -a source_files <<< "$SOURCE_AFTER_INSTALL_FILES"
-      for source_file in "${source_files[@]}"; do
-        [[ -n "$source_file" ]] || continue
-        printf "# activation script will source %q\n" "$source_file"
-      done
-    fi
-    printf "cat > %q <<'EOF'\n" "$ACTIVATE_SCRIPT"
-    printf "# activation script contents omitted in dry-run\n"
-    printf "EOF\n"
-    printf "chmod 600 %q\n" "$ACTIVATE_SCRIPT"
+    print_dotfiles_dry_run
     printf ". %q\n" "$ACTIVATE_SCRIPT"
     printf "%q login --device-auth\n" "$(codex_bin)"
     return 0
@@ -449,10 +473,28 @@ if [[ "${1:-}" == "__github-setup" ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-  shift
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --dotfiles-only)
+      DOTFILES_ONLY=1
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      fail "unknown option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 setup_install_log "${ORIGINAL_ARGS[@]}"
 trap on_install_error ERR
@@ -485,6 +527,15 @@ else
 fi
 
 require_install_files
+
+if [[ "$DOTFILES_ONLY" -eq 1 ]]; then
+  if [[ $# -gt 0 ]]; then
+    fail "--dotfiles-only cannot be combined with a script name"
+  fi
+
+  run_dotfiles_only
+  exit 0
+fi
 
 if [[ $# -eq 0 ]]; then
   run_default_bootstrap

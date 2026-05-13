@@ -54,6 +54,13 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
   bash
 ```
 
+To only clone/update and install the dotfiles repos without installing Nix,
+packages, GitHub SSH setup, or Codex login, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/install | bash -s -- --dotfiles-only
+```
+
 ## Run A Command
 
 Run a command after installing:

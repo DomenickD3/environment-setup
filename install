@@ -240,24 +240,15 @@ install_stow() {
 }
 
 ensure_nix_profile_path() {
-  local bashrc="$HOME/.bashrc"
   local profile_bin="$HOME/.nix-profile/bin"
 
   case ":$PATH:" in
     *":$profile_bin:"*) ;;
-    *) export PATH="$profile_bin:$PATH" ;;
+    *)
+      export PATH="$profile_bin:$PATH"
+      echo "Added ~/.nix-profile/bin to PATH for this installer process."
+      ;;
   esac
-
-  if [[ -f "$bashrc" ]] && ! grep -Fq '.nix-profile/bin' "$bashrc"; then
-    cat <<'EOF' >> "$bashrc"
-
-# Prefer user-installed Nix binaries, including codex.
-if [ -d "$HOME/.nix-profile/bin" ]; then
-    export PATH="$HOME/.nix-profile/bin:$PATH"
-fi
-EOF
-    echo "Added ~/.nix-profile/bin to $bashrc for future shells."
-  fi
 }
 
 run_codex_login() {
@@ -434,7 +425,7 @@ run_default_bootstrap() {
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#neovim"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#tmux"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#stow"
-    printf "ensure %q is on PATH in the current shell and ~/.bashrc\n" "$HOME/.nix-profile/bin"
+    printf "ensure %q is on PATH in the installer process\n" "$HOME/.nix-profile/bin"
     printf "%q\n" "$INSTALL_DIR/bin/setup-github-ssh"
     print_dotfiles_dry_run
     printf ". %q\n" "$ACTIVATE_SCRIPT"

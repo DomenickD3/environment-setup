@@ -19,8 +19,9 @@ This clones or updates the repo at:
 Then it updates apt packages when apt is available, installs Nix if needed,
 installs Codex, GitHub CLI, Neovim, tmux, and stow into your Nix profile, runs
 the GitHub SSH key setup interactively, clones or updates your dotfiles and
-dotfiles-private repos, runs their install commands, writes a current-shell
-activation script, and prompts you to log in to your Codex subscription.
+dotfiles-private repos, runs their install commands, updates the installer
+process PATH, writes a current-shell activation script, and prompts you to log
+in to your Codex subscription.
 
 Installer output is appended to:
 
@@ -110,6 +111,10 @@ After dotfiles install, the installer writes an activation script that sources
 `~/.profile` and `~/.bashrc` by default. The installer does not source those
 files itself because it cannot change the parent terminal when run with
 `curl ... | bash`.
+
+Persistent shell configuration, including adding `~/.nix-profile/bin` to PATH
+for future terminals, is owned by the dotfiles repo. The installer only updates
+PATH for its own process so later bootstrap steps can find Nix profile binaries.
 
 To apply the installed Nix profile and shell startup files to the terminal that
 launched the installer, source the generated activation file after install:

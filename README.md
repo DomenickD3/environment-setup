@@ -107,6 +107,11 @@ For dotfiles, the installer defaults to:
 If either repo uses a different entrypoint, set `DOTFILES_INSTALL_CMD` or
 `DOTFILES_PRIVATE_INSTALL_CMD`.
 
+Environment setup owns bootstrap work: installing tools, authenticating
+services, syncing the dotfiles repos, and dispatching their install commands.
+Public dotfiles own shell, editor, and tmux configuration. Private dotfiles own
+private identity configuration, such as Git author settings.
+
 After dotfiles install, the installer writes an activation script that sources
 `~/.profile` and `~/.bashrc` by default. The installer does not source those
 files itself because it cannot change the parent terminal when run with
@@ -115,6 +120,11 @@ files itself because it cannot change the parent terminal when run with
 Persistent shell configuration, including adding `~/.nix-profile/bin` to PATH
 for future terminals, is owned by the dotfiles repo. The installer only updates
 PATH for its own process so later bootstrap steps can find Nix profile binaries.
+
+In `--dry-run` output, package installs, GitHub/Codex authentication, repository
+syncs, and activation script generation are environment setup actions. User
+configuration paths such as `~/.bashrc`, `~/.config/nvim`, `~/.tmux.conf`, and
+`~/.gitconfig` are owned by the dotfiles install commands.
 
 To apply the installed Nix profile and shell startup files to the terminal that
 launched the installer, source the generated activation file after install:

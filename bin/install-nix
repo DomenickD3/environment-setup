@@ -9,6 +9,7 @@ Options:
   --daemon           Force the multi-user daemon install.
   --no-daemon        Force the single-user install.
   --yes              Do not prompt before running the Nix installer.
+                     Also approve safe recovery of a stale Nix backup file.
   --dry-run          Print the installer command without running it.
   -h, --help         Show this help.
 USAGE
@@ -27,6 +28,70 @@ prompt_yes_no() {
 
 has_systemd() {
   [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1
+}
+
+check_nix_installer_backup_collision() {
+  local backup_path="/etc/bash.bashrc.backup-before-nix"
+  local target_path="/etc/bash.bashrc"
+  local recovery_dir
+
+  [[ -e "$backup_path" ]] || return 0
+
+  echo "Found stale Nix installer backup: $backup_path"
+  echo "The official Nix installer refuses to continue while that file exists."
+  echo
+
+  if grep -qiE 'nix|/nix' "$backup_path"; then
+    cat <<EOF >&2
+error: $backup_path contains Nix-related lines.
+
+Refusing to restore it automatically because it may not be a clean pre-Nix
+backup. Inspect these files manually before rerunning:
+
+  $target_path
+  $backup_path
+EOF
+    return 1
+  fi
+
+  recovery_dir="/root/nix-installer-recovery-$(date +%Y%m%d-%H%M%S)"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    cat <<EOF
+# stale Nix backup recovery
+sudo mkdir -p "$recovery_dir"
+sudo cp -a "$target_path" "$recovery_dir/bash.bashrc"
+sudo cp -a "$backup_path" "$recovery_dir/bash.bashrc.backup-before-nix"
+sudo mv "$backup_path" "$target_path"
+EOF
+    return 0
+  fi
+
+  if [[ "$assume_yes" -ne 1 ]]; then
+    cat <<EOF
+The backup file does not contain Nix-related lines, so the installer can recover
+by saving both files under:
+
+  $recovery_dir
+
+and then restoring:
+
+  $backup_path -> $target_path
+EOF
+
+    if ! prompt_yes_no "Recover the stale Nix installer backup now?"; then
+      echo "Cancelled."
+      return 1
+    fi
+  fi
+
+  sudo mkdir -p "$recovery_dir"
+  sudo cp -a "$target_path" "$recovery_dir/bash.bashrc"
+  sudo cp -a "$backup_path" "$recovery_dir/bash.bashrc.backup-before-nix"
+  sudo mv "$backup_path" "$target_path"
+
+  echo "Recovered stale Nix installer backup."
+  echo "Saved copies under: $recovery_dir"
 }
 
 install_mode=""
@@ -68,6 +133,8 @@ if command -v nix >/dev/null 2>&1; then
   nix --version
   exit 0
 fi
+
+check_nix_installer_backup_collision
 
 missing_commands=()
 for command_name in curl sh; do

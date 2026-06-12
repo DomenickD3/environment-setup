@@ -30,6 +30,32 @@ has_systemd() {
   [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1
 }
 
+load_existing_nix() {
+  if command -v nix >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -r "$HOME/.nix-profile/etc/profile.d/nix.sh" ]]; then
+    # shellcheck disable=SC1091
+    . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+  elif [[ -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
+    # shellcheck disable=SC1091
+    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+  fi
+
+  if command -v nix >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -x "$HOME/.nix-profile/bin/nix" ]]; then
+    PATH="$HOME/.nix-profile/bin:$PATH"
+    export PATH
+  elif [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
+    PATH="/nix/var/nix/profiles/default/bin:$PATH"
+    export PATH
+  fi
+}
+
 check_nix_installer_backup_collision() {
   local backup_path="/etc/bash.bashrc.backup-before-nix"
   local target_path="/etc/bash.bashrc"
@@ -128,6 +154,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+load_existing_nix
+
 if command -v nix >/dev/null 2>&1; then
   echo "Nix is already installed:"
   nix --version
@@ -181,7 +209,24 @@ if [[ "$assume_yes" -ne 1 ]]; then
   fi
 fi
 
+set +e
 curl --proto '=https' --tlsv1.2 -L "$installer_url" | sh -s -- "$install_mode"
+installer_status=$?
+set -e
+
+if [[ "$installer_status" -ne 0 ]]; then
+  echo
+  echo "Nix installer exited with status $installer_status; checking whether Nix is now usable..."
+  load_existing_nix
+
+  if command -v nix >/dev/null 2>&1; then
+    echo "Nix is available despite the installer error:"
+    nix --version
+  else
+    echo "Nix is still not available after the installer error." >&2
+    exit "$installer_status"
+  fi
+fi
 
 cat <<'EOF'
 

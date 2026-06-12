@@ -38,19 +38,37 @@ github_has_key() {
   local public_key_path="$1"
   local public_key
   local github_key
+  local github_keys
 
   command -v gh >/dev/null 2>&1 || return 1
   gh auth status >/dev/null 2>&1 || return 1
 
   public_key="$(normalize_public_key "$public_key_path")"
+
+  if ! github_keys="$(gh ssh-key list --json key --jq '.[].key')"; then
+    return 1
+  fi
+
   while IFS= read -r github_key; do
     [[ -n "$github_key" ]] || continue
     if [[ "$(awk '{print $1 " " $2}' <<<"$github_key")" == "$public_key" ]]; then
       return 0
     fi
-  done < <(gh ssh-key list --json key --jq '.[].key' 2>/dev/null)
+  done <<<"$github_keys"
 
   return 1
+}
+
+ensure_github_public_key_scope() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh auth status >/dev/null 2>&1 || return 1
+
+  if gh ssh-key list --json key --jq '.[].key' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Refreshing GitHub CLI auth scope for SSH key management..."
+  gh auth refresh -h github.com -s admin:public_key
 }
 
 agent_has_key() {
@@ -131,6 +149,8 @@ ensure_github_key() {
       return 0
     fi
   fi
+
+  ensure_github_public_key_scope
 
   if github_has_key "$public_key_path"; then
     echo "GitHub already has this SSH key."

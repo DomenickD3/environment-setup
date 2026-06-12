@@ -3,9 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/15f4ee454b1dce334612fa6843b3e05cf546efab";
+    nixpkgs-codex.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
-  outputs = { nixpkgs, ... }:
+  outputs = { nixpkgs, nixpkgs-codex, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -17,14 +18,21 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      packages = forAllSystems (system: {
-        default = nixpkgs.legacyPackages.${system}.gh;
-        codex = nixpkgs.legacyPackages.${system}.codex;
-        gh = nixpkgs.legacyPackages.${system}.gh;
-        neovim = nixpkgs.legacyPackages.${system}.neovim;
-        stow = nixpkgs.legacyPackages.${system}.stow;
-        tmux = nixpkgs.legacyPackages.${system}.tmux;
-      });
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          codexPkgs = nixpkgs-codex.legacyPackages.${system};
+        in
+        {
+          default = pkgs.gh;
+          codex = codexPkgs.codex;
+          gh = pkgs.gh;
+          neovim = pkgs.neovim;
+          stow = pkgs.stow;
+          tmux = pkgs.tmux;
+        }
+      );
 
       devShells = forAllSystems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {

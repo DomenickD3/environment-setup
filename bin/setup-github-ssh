@@ -182,7 +182,7 @@ ensure_github_key() {
   if ! gh auth status >/dev/null 2>&1; then
     echo "GitHub CLI is installed but not authenticated."
     if prompt_yes_no "Log in to GitHub now so I can add the public key automatically?"; then
-      gh auth login --hostname github.com --git-protocol ssh --web
+      gh auth login --hostname github.com --git-protocol ssh --web --scopes admin:public_key
     else
       return 0
     fi

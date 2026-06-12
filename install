@@ -178,6 +178,16 @@ load_nix_profile() {
     # shellcheck disable=SC1091
     . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
   fi
+
+  if command -v nix >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -x "$HOME/.nix-profile/bin/nix" ]]; then
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+  elif [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
+    export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+  fi
 }
 
 update_system_packages() {

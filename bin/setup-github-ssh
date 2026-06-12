@@ -34,6 +34,44 @@ normalize_public_key() {
   awk '{print $1 " " $2}' "$1"
 }
 
+ensure_github_ssh_config() {
+  local private_key_path="$1"
+  local config_path="$ssh_dir/config"
+  local temp_config
+  local identity_file
+
+  identity_file="${private_key_path/#$HOME/\~}"
+  temp_config="$(mktemp)"
+
+  if [[ -e "$config_path" ]]; then
+    awk '
+      /^# BEGIN environment-setup github ssh$/ { skip = 1; next }
+      /^# END environment-setup github ssh$/ { skip = 0; next }
+      skip != 1 { print }
+    ' "$config_path" > "$temp_config"
+  fi
+
+  {
+    cat <<EOF
+# BEGIN environment-setup github ssh
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile $identity_file
+  IdentitiesOnly yes
+# END environment-setup github ssh
+EOF
+    if [[ -s "$temp_config" ]]; then
+      printf "\n"
+      cat "$temp_config"
+    fi
+  } > "$config_path"
+
+  rm -f "$temp_config"
+  chmod 600 "$config_path"
+  echo "Configured SSH to use $private_key_path for github.com."
+}
+
 github_has_key() {
   local public_key_path="$1"
   local public_key
@@ -278,6 +316,7 @@ fi
 
 chmod 600 "$key_path"
 chmod 644 "$public_key_path"
+ensure_github_ssh_config "$key_path"
 
 if [[ "$use_agent" -eq 1 ]]; then
   fingerprint="$(ssh-keygen -lf "$public_key_path" | awk '{print $2}')"

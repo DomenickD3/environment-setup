@@ -28,6 +28,7 @@ else
 fi
 DRY_RUN=0
 DOTFILES_ONLY=0
+SKIP_SYSTEM_UPGRADE=0
 ORIGINAL_ARGS=("$@")
 
 usage() {
@@ -45,6 +46,8 @@ subscription.
 Options:
   --dry-run          Print the actions without running them.
   --dotfiles-only   Only clone/update and install dotfiles and private dotfiles.
+  --skip-system-upgrade
+                     Skip apt-get update/upgrade during the default bootstrap.
   -h, --help         Show this help.
 
 Examples:
@@ -179,6 +182,11 @@ load_nix_profile() {
 
 update_system_packages() {
   section "Update System Packages"
+
+  if [[ "$SKIP_SYSTEM_UPGRADE" -eq 1 ]]; then
+    echo "Skipping system package update/upgrade."
+    return 0
+  fi
 
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "apt-get is not available; skipping system package update."
@@ -423,8 +431,12 @@ require_install_files() {
 
 run_default_bootstrap() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf "sudo apt-get update\n"
-    printf "sudo apt-get upgrade\n"
+    if [[ "$SKIP_SYSTEM_UPGRADE" -eq 1 ]]; then
+      printf "# skip apt-get update/upgrade\n"
+    else
+      printf "sudo apt-get update\n"
+      printf "sudo apt-get upgrade\n"
+    fi
     "$INSTALL_DIR/bin/install-nix" --dry-run
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#codex"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#gh"
@@ -478,6 +490,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dotfiles-only)
       DOTFILES_ONLY=1
+      shift
+      ;;
+    --skip-system-upgrade)
+      SKIP_SYSTEM_UPGRADE=1
       shift
       ;;
     --)

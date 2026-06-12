@@ -23,6 +23,13 @@ dotfiles-private repos, runs their install commands, updates the installer
 process PATH, writes a current-shell activation script, and prompts you to log
 in to your Codex subscription.
 
+For reruns where you do not want system package updates, skip the apt
+update/upgrade step with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/install | bash -s -- --skip-system-upgrade
+```
+
 Installer output is appended to:
 
 ```text

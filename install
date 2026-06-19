@@ -12,6 +12,12 @@ DEFAULT_DOTFILES_PRIVATE_REPO_URL="git@github.com:DomenickD3/.dotfiles-private.g
 DOTFILES_PRIVATE_REPO_URL="${DOTFILES_PRIVATE_REPO_URL:-$DEFAULT_DOTFILES_PRIVATE_REPO_URL}"
 DOTFILES_PRIVATE_DIR="${DOTFILES_PRIVATE_DIR:-$HOME/.dotfiles-private}"
 DOTFILES_PRIVATE_INSTALL_CMD="${DOTFILES_PRIVATE_INSTALL_CMD:-}"
+DEFAULT_CODEX_SKILLS_REPO_URL="git@github.com:DomenickD3/codex-skills.git"
+CODEX_SKILLS_REPO_URL="${CODEX_SKILLS_REPO_URL:-$DEFAULT_CODEX_SKILLS_REPO_URL}"
+CODEX_SKILLS_REPO_DIR="${CODEX_SKILLS_REPO_DIR:-$HOME/.local/share/codex-skills}"
+CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$CODEX_HOME_DIR/skills}"
+INSTALL_CODEX_SKILLS="${INSTALL_CODEX_SKILLS:-prompt}"
 SOURCE_AFTER_INSTALL_FILES="${SOURCE_AFTER_INSTALL_FILES-$HOME/.profile:$HOME/.bashrc}"
 INSTALL_LOG="${INSTALL_LOG:-$HOME/.local/state/environment-setup/install.log}"
 ACTIVATE_SCRIPT="${ACTIVATE_SCRIPT:-$HOME/.local/state/environment-setup/activate.sh}"
@@ -40,8 +46,9 @@ Clones or updates this repo into INSTALL_DIR.
 With no script name, installs Nix if needed, installs Codex into your Nix
 profile, along with GitHub CLI, Neovim, tmux, and stow, then runs the GitHub
 SSH key setup, clones or updates your dotfiles, installs them, writes a
-current-shell activation script, and prompts you to log in to your Codex
-subscription.
+current-shell activation script, prompts you to log in to your Codex
+subscription, and optionally installs Codex skills from your private skills
+repo.
 
 Options:
   --dry-run          Print the actions without running them.
@@ -74,6 +81,11 @@ Environment:
   DOTFILES_PRIVATE_DIR  Private dotfiles checkout location. Default: ~/.dotfiles-private
   DOTFILES_PRIVATE_INSTALL_CMD  Command to run inside the private dotfiles checkout after syncing.
                         Default: auto-detect bootstrap/install/install.sh/setup/script/install
+  CODEX_SKILLS_REPO_URL  Git URL for Codex skills.
+                        Default: git@github.com:DomenickD3/codex-skills.git
+  CODEX_SKILLS_REPO_DIR  Codex skills checkout location. Default: ~/.local/share/codex-skills
+  CODEX_SKILLS_DIR  Destination for installed skill links. Default: $CODEX_HOME/skills or ~/.codex/skills
+  INSTALL_CODEX_SKILLS  prompt, yes, or no. Default: prompt
   SOURCE_AFTER_INSTALL_FILES  Colon-separated shell files to include in the activation script.
                         Default: ~/.profile:~/.bashrc
 
@@ -91,6 +103,19 @@ fail() {
 
 section() {
   printf "\n==> %s\n\n" "$1"
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local reply
+
+  if [[ -r /dev/tty ]]; then
+    read -r -p "$prompt [y/N] " reply < /dev/tty
+  else
+    read -r -p "$prompt [y/N] " reply
+  fi
+
+  [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 setup_install_log() {
@@ -364,6 +389,93 @@ install_dotfiles_private() {
   sync_and_install_repo "Private Dotfiles" "$DOTFILES_PRIVATE_REPO_URL" "$DOTFILES_PRIVATE_DIR" "$DOTFILES_PRIVATE_INSTALL_CMD"
 }
 
+install_codex_skills() {
+  local install_choice
+  local skill_file
+  local skill_dir
+  local skill_name
+  local source_dir
+  local dest_path
+  local found_skill=0
+
+  section "Codex Skills"
+
+  install_choice="$(printf "%s" "$INSTALL_CODEX_SKILLS" | tr '[:upper:]' '[:lower:]')"
+  case "$install_choice" in
+    yes|y|true|1)
+      ;;
+    no|n|false|0|skip)
+      echo "Skipping Codex skills install."
+      return 0
+      ;;
+    prompt|"")
+      if ! prompt_yes_no "Install Codex skills from $CODEX_SKILLS_REPO_URL now?"; then
+        echo "Skipping Codex skills install."
+        return 0
+      fi
+      ;;
+    *)
+      fail "INSTALL_CODEX_SKILLS must be prompt, yes, or no"
+      ;;
+  esac
+
+  if [[ -d "$CODEX_SKILLS_REPO_DIR/.git" ]]; then
+    echo "Using existing Codex skills checkout: $CODEX_SKILLS_REPO_DIR"
+    git -C "$CODEX_SKILLS_REPO_DIR" fetch --prune
+    git -C "$CODEX_SKILLS_REPO_DIR" pull --ff-only
+  else
+    echo "Cloning Codex skills repo:"
+    echo "  from: $CODEX_SKILLS_REPO_URL"
+    echo "  to:   $CODEX_SKILLS_REPO_DIR"
+    mkdir -p "$(dirname "$CODEX_SKILLS_REPO_DIR")"
+    git clone "$CODEX_SKILLS_REPO_URL" "$CODEX_SKILLS_REPO_DIR"
+  fi
+
+  mkdir -p "$CODEX_SKILLS_DIR"
+
+  if [[ -f "$CODEX_SKILLS_REPO_DIR/SKILL.md" ]]; then
+    skill_dir="$CODEX_SKILLS_REPO_DIR"
+    skill_name="$(basename "$skill_dir")"
+    source_dir="$(cd "$skill_dir" && pwd -P)"
+    dest_path="$CODEX_SKILLS_DIR/$skill_name"
+    found_skill=1
+
+    if [[ -L "$dest_path" && "$(readlink "$dest_path")" == "$source_dir" ]]; then
+      echo "Codex skill is already linked: $skill_name"
+    elif [[ -e "$dest_path" || -L "$dest_path" ]]; then
+      echo "Codex skill already exists, skipping: $dest_path"
+    else
+      ln -s "$source_dir" "$dest_path"
+      echo "Installed Codex skill: $skill_name"
+    fi
+  fi
+
+  shopt -s nullglob
+  for skill_file in "$CODEX_SKILLS_REPO_DIR"/*/SKILL.md "$CODEX_SKILLS_REPO_DIR"/skills/*/SKILL.md; do
+    skill_dir="$(dirname "$skill_file")"
+    skill_name="$(basename "$skill_dir")"
+    source_dir="$(cd "$skill_dir" && pwd -P)"
+    dest_path="$CODEX_SKILLS_DIR/$skill_name"
+    found_skill=1
+
+    if [[ -L "$dest_path" && "$(readlink "$dest_path")" == "$source_dir" ]]; then
+      echo "Codex skill is already linked: $skill_name"
+    elif [[ -e "$dest_path" || -L "$dest_path" ]]; then
+      echo "Codex skill already exists, skipping: $dest_path"
+    else
+      ln -s "$source_dir" "$dest_path"
+      echo "Installed Codex skill: $skill_name"
+    fi
+  done
+  shopt -u nullglob
+
+  if [[ "$found_skill" -eq 0 ]]; then
+    fail "no Codex skills found in $CODEX_SKILLS_REPO_DIR; expected SKILL.md at repo root, */SKILL.md, or skills/*/SKILL.md"
+  fi
+
+  echo "Restart Codex to pick up new skills."
+}
+
 print_dotfiles_dry_run() {
   local install_cmd
   local source_file
@@ -402,6 +514,18 @@ print_dotfiles_dry_run() {
   printf "# activation script contents omitted in dry-run\n"
   printf "EOF\n"
   printf "chmod 600 %q\n" "$ACTIVATE_SCRIPT"
+}
+
+print_codex_skills_dry_run() {
+  printf "# prompt to install Codex skills from %q\n" "$CODEX_SKILLS_REPO_URL"
+  if [[ -d "$CODEX_SKILLS_REPO_DIR/.git" ]]; then
+    printf "git -C %q fetch --prune\n" "$CODEX_SKILLS_REPO_DIR"
+    printf "git -C %q pull --ff-only\n" "$CODEX_SKILLS_REPO_DIR"
+  else
+    printf "git clone %q %q\n" "$CODEX_SKILLS_REPO_URL" "$CODEX_SKILLS_REPO_DIR"
+  fi
+  printf "mkdir -p %q\n" "$CODEX_SKILLS_DIR"
+  printf "# link each discovered Codex skill into %q\n" "$CODEX_SKILLS_DIR"
 }
 
 run_dotfiles_only() {
@@ -458,6 +582,7 @@ run_default_bootstrap() {
     print_dotfiles_dry_run
     printf ". %q\n" "$ACTIVATE_SCRIPT"
     printf "%q login --device-auth\n" "$(codex_bin)"
+    print_codex_skills_dry_run
     return 0
   fi
 
@@ -479,6 +604,7 @@ run_default_bootstrap() {
   write_activate_script
   section "Codex Login"
   run_codex_login
+  install_codex_skills
   print_current_shell_notice
 }
 

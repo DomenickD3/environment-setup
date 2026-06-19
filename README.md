@@ -21,7 +21,9 @@ installs Codex, GitHub CLI, Neovim, tmux, and stow into your Nix profile, runs
 the GitHub SSH key setup interactively, clones or updates your dotfiles and
 dotfiles-private repos, runs their install commands, updates the installer
 process PATH, writes a current-shell activation script, and prompts you to log
-in to your Codex subscription.
+in to your Codex subscription. At the end, after GitHub SSH has been set up, it
+prompts to install Codex skills from the private
+`git@github.com:DomenickD3/codex-skills.git` repo.
 
 For reruns where you do not want system package updates, skip the apt
 update/upgrade step with:
@@ -61,6 +63,16 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
   DOTFILES_PRIVATE_INSTALL_CMD="./bootstrap" \
   bash
 ```
+
+Codex skills install is opt-in by default. For unattended runs, set:
+
+```bash
+INSTALL_CODEX_SKILLS=yes
+```
+
+Set `INSTALL_CODEX_SKILLS=no` to skip the prompt. Override the private skills
+repo, checkout path, or destination with `CODEX_SKILLS_REPO_URL`,
+`CODEX_SKILLS_REPO_DIR`, or `CODEX_SKILLS_DIR`.
 
 To only clone/update and install the dotfiles repos without installing Nix,
 packages, GitHub SSH setup, or Codex login, run:
@@ -129,9 +141,9 @@ for future terminals, is owned by the dotfiles repo. The installer only updates
 PATH for its own process so later bootstrap steps can find Nix profile binaries.
 
 In `--dry-run` output, package installs, GitHub/Codex authentication, repository
-syncs, and activation script generation are environment setup actions. User
-configuration paths such as `~/.bashrc`, `~/.config/nvim`, `~/.tmux.conf`, and
-`~/.gitconfig` are owned by the dotfiles install commands.
+syncs, Codex skills linking, and activation script generation are environment
+setup actions. User configuration paths such as `~/.bashrc`, `~/.config/nvim`,
+`~/.tmux.conf`, and `~/.gitconfig` are owned by the dotfiles install commands.
 
 To apply the installed Nix profile and shell startup files to the terminal that
 launched the installer, source the generated activation file after install:

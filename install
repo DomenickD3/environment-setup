@@ -6,11 +6,11 @@ REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 DEFAULT_INSTALL_DIR="$HOME/.local/share/environment-setup"
 DEFAULT_DOTFILES_REPO_URL="git@github.com:DomenickD3/.dotfiles.git"
 DOTFILES_REPO_URL="${DOTFILES_REPO_URL:-$DEFAULT_DOTFILES_REPO_URL}"
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/Projects/.dotfiles}"
 DOTFILES_INSTALL_CMD="${DOTFILES_INSTALL_CMD:-}"
 DEFAULT_DOTFILES_PRIVATE_REPO_URL="git@github.com:DomenickD3/.dotfiles-private.git"
 DOTFILES_PRIVATE_REPO_URL="${DOTFILES_PRIVATE_REPO_URL:-$DEFAULT_DOTFILES_PRIVATE_REPO_URL}"
-DOTFILES_PRIVATE_DIR="${DOTFILES_PRIVATE_DIR:-$HOME/.dotfiles-private}"
+DOTFILES_PRIVATE_DIR="${DOTFILES_PRIVATE_DIR:-$HOME/Projects/.dotfiles-private}"
 DOTFILES_PRIVATE_INSTALL_CMD="${DOTFILES_PRIVATE_INSTALL_CMD:-}"
 DEFAULT_CODEX_SKILLS_REPO_URL="git@github.com:DomenickD3/codex-skills.git"
 CODEX_SKILLS_REPO_URL="${CODEX_SKILLS_REPO_URL:-$DEFAULT_CODEX_SKILLS_REPO_URL}"
@@ -73,12 +73,12 @@ Environment:
                 changes to the current terminal after install.
                 Default: ~/.local/state/environment-setup/activate.sh
   DOTFILES_REPO_URL  Git URL for dotfiles. Default: git@github.com:DomenickD3/.dotfiles.git
-  DOTFILES_DIR       Dotfiles checkout location. Default: ~/.dotfiles
+  DOTFILES_DIR       Dotfiles checkout location. Default: ~/Projects/.dotfiles
   DOTFILES_INSTALL_CMD  Command to run inside the dotfiles checkout after syncing.
                         Default: auto-detect bootstrap/install/install.sh/setup/script/install
   DOTFILES_PRIVATE_REPO_URL  Git URL for private dotfiles.
                         Default: git@github.com:DomenickD3/.dotfiles-private.git
-  DOTFILES_PRIVATE_DIR  Private dotfiles checkout location. Default: ~/.dotfiles-private
+  DOTFILES_PRIVATE_DIR  Private dotfiles checkout location. Default: ~/Projects/.dotfiles-private
   DOTFILES_PRIVATE_INSTALL_CMD  Command to run inside the private dotfiles checkout after syncing.
                         Default: auto-detect bootstrap/install/install.sh/setup/script/install
   CODEX_SKILLS_REPO_URL  Git URL for Codex skills.

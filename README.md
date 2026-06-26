@@ -118,8 +118,8 @@ nix --extra-experimental-features nix-command --extra-experimental-features flak
 
 For dotfiles, the installer defaults to:
 
-- cloning `git@github.com:DomenickD3/.dotfiles.git` into `~/.dotfiles`
-- cloning `git@github.com:DomenickD3/.dotfiles-private.git` into `~/.dotfiles-private`
+- cloning `git@github.com:DomenickD3/.dotfiles.git` into `~/Projects/.dotfiles`
+- cloning `git@github.com:DomenickD3/.dotfiles-private.git` into `~/Projects/.dotfiles-private`
 - auto-detecting one of `./bootstrap`, `./install`, `./install.sh`, `./setup`, or `script/install`
 - running that command from inside each checkout
 

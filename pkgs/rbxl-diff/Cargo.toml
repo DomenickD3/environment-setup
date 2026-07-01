@@ -1,0 +1,11 @@
+[package]
+name = "rbxl-diff"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+rbx_binary = "2.0.1"
+rbx_dom_weak = "4.1.0"
+rbx_reflection = "6.1.0"
+rbx_reflection_database = "2.0.2"

@@ -29,6 +29,13 @@
           codex = codexPkgs.codex;
           gh = pkgs.gh;
           neovim = pkgs.neovim;
+          rbxl-diff = pkgs.rustPlatform.buildRustPackage {
+            pname = "rbxl-diff";
+            version = "0.1.0";
+            src = ./pkgs/rbxl-diff;
+            cargoLock.lockFile = ./pkgs/rbxl-diff/Cargo.lock;
+          };
+          rojo = pkgs.rojo;
           stow = pkgs.stow;
           tmux = pkgs.tmux;
         }

@@ -18,6 +18,8 @@ CODEX_SKILLS_REPO_DIR="${CODEX_SKILLS_REPO_DIR:-$HOME/.local/share/codex-skills}
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$CODEX_HOME_DIR/skills}"
 INSTALL_CODEX_SKILLS="${INSTALL_CODEX_SKILLS:-prompt}"
+INSTALL_ROJO="${INSTALL_ROJO:-no}"
+INSTALL_ROBLOX_TOOLS="${INSTALL_ROBLOX_TOOLS:-no}"
 SOURCE_AFTER_INSTALL_FILES="${SOURCE_AFTER_INSTALL_FILES-$HOME/.profile:$HOME/.bashrc}"
 INSTALL_LOG="${INSTALL_LOG:-$HOME/.local/state/environment-setup/install.log}"
 ACTIVATE_SCRIPT="${ACTIVATE_SCRIPT:-$HOME/.local/state/environment-setup/activate.sh}"
@@ -35,6 +37,8 @@ fi
 DRY_RUN=0
 DOTFILES_ONLY=0
 SKIP_SYSTEM_UPGRADE=0
+WITH_ROJO=0
+WITH_ROBLOX_TOOLS=0
 ORIGINAL_ARGS=("$@")
 
 usage() {
@@ -55,11 +59,16 @@ Options:
   --dotfiles-only   Only clone/update and install dotfiles and private dotfiles.
   --skip-system-upgrade
                      Skip apt-get update/upgrade during the default bootstrap.
+  --with-rojo        Install Rojo into your Nix profile.
+  --with-roblox-tools
+                     Install Roblox development tools into your Nix profile.
   -h, --help         Show this help.
 
 Examples:
   curl -fsSL RAW_INSTALL_URL | bash
   curl -fsSL RAW_INSTALL_URL | bash -s -- --dry-run
+  curl -fsSL RAW_INSTALL_URL | bash -s -- --with-rojo
+  curl -fsSL RAW_INSTALL_URL | bash -s -- --with-roblox-tools
   curl -fsSL RAW_INSTALL_URL | bash -s -- --dotfiles-only
   curl -fsSL RAW_INSTALL_URL | bash -s -- install-nix
   curl -fsSL RAW_INSTALL_URL | bash -s -- setup-github-ssh --help
@@ -86,6 +95,8 @@ Environment:
   CODEX_SKILLS_REPO_DIR  Codex skills checkout location. Default: ~/.local/share/codex-skills
   CODEX_SKILLS_DIR  Destination for installed skill links. Default: $CODEX_HOME/skills or ~/.codex/skills
   INSTALL_CODEX_SKILLS  prompt, yes, or no. Default: prompt
+  INSTALL_ROJO   yes, no, or prompt. Default: no. --with-rojo is equivalent to yes.
+  INSTALL_ROBLOX_TOOLS  yes, no, or prompt. Default: no. --with-roblox-tools is equivalent to yes.
   SOURCE_AFTER_INSTALL_FILES  Colon-separated shell files to include in the activation script.
                         Default: ~/.profile:~/.bashrc
 
@@ -286,6 +297,83 @@ install_tmux() {
 install_stow() {
   section "Install stow"
   install_profile_package "stow" "stow" "stow"
+}
+
+install_rojo() {
+  section "Install Rojo"
+  install_profile_package "Rojo" "rojo" "rojo"
+}
+
+install_rbxl_diff() {
+  section "Install Roblox RBXL diff tool"
+  install_profile_package "rbxl-diff" "rbxl-diff" "rbxl-diff"
+}
+
+install_roblox_tools() {
+  install_rojo
+  install_rbxl_diff
+}
+
+maybe_install_rojo() {
+  local install_choice
+
+  if [[ "$WITH_ROBLOX_TOOLS" -eq 1 ]]; then
+    return 0
+  fi
+
+  if [[ "$WITH_ROJO" -eq 1 && "$WITH_ROBLOX_TOOLS" -ne 1 ]]; then
+    install_rojo
+    return 0
+  fi
+
+  install_choice="$(printf "%s" "$INSTALL_ROJO" | tr '[:upper:]' '[:lower:]')"
+  case "$install_choice" in
+    yes|y|true|1)
+      install_rojo
+      ;;
+    no|n|false|0|skip|"")
+      echo "Skipping Rojo install."
+      ;;
+    prompt)
+      if prompt_yes_no "Install Rojo into your Nix profile now?"; then
+        install_rojo
+      else
+        echo "Skipping Rojo install."
+      fi
+      ;;
+    *)
+      fail "INSTALL_ROJO must be yes, no, or prompt"
+      ;;
+  esac
+}
+
+maybe_install_roblox_tools() {
+  local install_choice
+
+  if [[ "$WITH_ROBLOX_TOOLS" -eq 1 ]]; then
+    install_roblox_tools
+    return 0
+  fi
+
+  install_choice="$(printf "%s" "$INSTALL_ROBLOX_TOOLS" | tr '[:upper:]' '[:lower:]')"
+  case "$install_choice" in
+    yes|y|true|1)
+      install_roblox_tools
+      ;;
+    no|n|false|0|skip|"")
+      echo "Skipping Roblox tools install."
+      ;;
+    prompt)
+      if prompt_yes_no "Install Roblox development tools into your Nix profile now?"; then
+        install_roblox_tools
+      else
+        echo "Skipping Roblox tools install."
+      fi
+      ;;
+    *)
+      fail "INSTALL_ROBLOX_TOOLS must be yes, no, or prompt"
+      ;;
+  esac
 }
 
 ensure_nix_profile_path() {
@@ -577,6 +665,14 @@ run_default_bootstrap() {
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#neovim"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#tmux"
     printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#stow"
+    if [[ "$WITH_ROBLOX_TOOLS" -eq 1 || "$(printf "%s" "$INSTALL_ROBLOX_TOOLS" | tr '[:upper:]' '[:lower:]')" =~ ^(yes|y|true|1|prompt)$ ]]; then
+      printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#rojo"
+      printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#rbxl-diff"
+    elif [[ "$WITH_ROJO" -eq 1 || "$(printf "%s" "$INSTALL_ROJO" | tr '[:upper:]' '[:lower:]')" =~ ^(yes|y|true|1|prompt)$ ]]; then
+      printf "nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add %q\n" "path:$INSTALL_DIR#rojo"
+    else
+      printf "# skip Roblox tools install\n"
+    fi
     printf "ensure %q is on PATH in the installer process\n" "$HOME/.nix-profile/bin"
     printf "%q\n" "$INSTALL_DIR/bin/setup-github-ssh"
     print_dotfiles_dry_run
@@ -596,6 +692,8 @@ run_default_bootstrap() {
   install_neovim
   install_tmux
   install_stow
+  maybe_install_roblox_tools
+  maybe_install_rojo
   ensure_nix_profile_path
   section "GitHub SSH"
   "$INSTALL_DIR/install" "__github-setup"
@@ -630,6 +728,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-system-upgrade)
       SKIP_SYSTEM_UPGRADE=1
+      shift
+      ;;
+    --with-rojo)
+      WITH_ROJO=1
+      shift
+      ;;
+    --with-roblox-tools)
+      WITH_ROBLOX_TOOLS=1
       shift
       ;;
     --)

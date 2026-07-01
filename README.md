@@ -32,6 +32,23 @@ update/upgrade step with:
 curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/install | bash -s -- --skip-system-upgrade
 ```
 
+Rojo and `rbxl-diff` are available as optional Roblox development tools. Install
+them during the default setup with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/install | bash -s -- --with-roblox-tools
+```
+
+For unattended runs, set:
+
+```bash
+INSTALL_ROBLOX_TOOLS=yes
+```
+
+Set `INSTALL_ROBLOX_TOOLS=prompt` to be asked during setup, or leave it unset
+to skip Roblox tools by default. To install only Rojo without the RBXL diff
+helper, use `--with-rojo` or `INSTALL_ROJO=yes`.
+
 Installer output is appended to:
 
 ```text
@@ -106,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/DomenickD3/environment-setup/main/i
 - `bin/install-nix`: install Nix using the official installer URL.
 - `bin/setup-github-ssh`: generate a GitHub SSH key, optionally upload it with `gh`, and test SSH authentication.
 
-The default install flow also installs Codex, GitHub CLI, Neovim, tmux, and stow persistently with:
+The default install flow installs Codex, GitHub CLI, Neovim, tmux, and stow persistently with:
 
 ```bash
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#codex
@@ -115,6 +132,17 @@ nix --extra-experimental-features nix-command --extra-experimental-features flak
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#tmux
 nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#stow
 ```
+
+When Roblox tools are enabled with `--with-roblox-tools` or
+`INSTALL_ROBLOX_TOOLS=yes`, the installer also runs:
+
+```bash
+nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#rojo
+nix --extra-experimental-features nix-command --extra-experimental-features flakes profile add path:$INSTALL_DIR#rbxl-diff
+```
+
+When only Rojo is enabled with `--with-rojo` or `INSTALL_ROJO=yes`, the
+installer only runs the Rojo profile install.
 
 For dotfiles, the installer defaults to:
 
